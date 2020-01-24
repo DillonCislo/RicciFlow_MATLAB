@@ -168,7 +168,8 @@ while nnz(embedFlags) > 0
     r2 = L_F( fID, embeddedInFace(1) );
     
     % Find the intersection(s) of the circles
-    [xout, yout] = circcirc( x1, y1, r1, x2, y2, r2 );
+    [xout, yout] = DiscreteRicciFlow.circCircIntersect( x1, y1, r1, ...
+        x2, y2, r2 );
     
     % Optional debugging for node positions
     if any(isnan([xout; yout]))
