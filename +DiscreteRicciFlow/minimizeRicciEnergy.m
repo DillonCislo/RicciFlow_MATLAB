@@ -1,7 +1,8 @@
-function [ K, L_E, gamma_V ] = minimizeRicciEnergy( F, E, V3D, ...
+function [ K, L_E, gamma_V, allL ] = minimizeRicciEnergy( F, E, V3D, ...
     feIDx, V2E, bdyIDx, ...
     K0, Ktar, L0, gamma_V0, invD_E, ...
-    tol, pcgTol, maxIter, maxPCGIter, iterDisp, freeBoundary )
+    tol, pcgTol, maxIter, maxPCGIter, iterDisp, freeBoundary, ...
+    allL, recordAllL )
 %MINIMIZERICCIENERGY Minimizes the Ricci Energy of a mesh triangulation
 %given a set of vertex target curvatures and an initial circle packing
 %metric using the inversive distance scheme.  Intended for internal use
@@ -58,6 +59,12 @@ function [ K, L_E, gamma_V ] = minimizeRicciEnergy( F, E, V3D, ...
 %
 %       - freeBoundary: Boolean specifying free vs fixed boundary shape
 %
+%       - allL:         A cell array containing the intermediate edge
+%                       lengths from each iteration along the flow
+%
+%       - recordAllL:   Boolean indicating whether or not to record
+%                       intermediate edge lengths
+%
 %
 %   OUTPUT PARAMETERS:
 %
@@ -66,6 +73,9 @@ function [ K, L_E, gamma_V ] = minimizeRicciEnergy( F, E, V3D, ...
 %       - L:            #Ex1 list of output edge lengths
 %
 %       - gamma_V:      #Vx1 list of output circle packing radii
+%
+%       - allL:         A cell array containing the intermediate edge
+%                       lengths from each iteration along the flow
 %
 % by Dillon Cislo 11/17/2019
 
@@ -214,6 +224,9 @@ while err > tol
     gammaI = gamma_V(E(:,1)); gammaJ = gamma_V(E(:,2));
     L_E = sqrt( gammaI.^2 + gammaJ.^2 + 2 .* gammaI .* gammaJ.* invD_E );
     L_F = L_E(feIDx);
+    
+    % Record intermediate edge lengths
+    if recordAllL, allL = [ allL, L_E ]; end
     
     % Calculate internal angles from triangulation edge lengths -----------
     

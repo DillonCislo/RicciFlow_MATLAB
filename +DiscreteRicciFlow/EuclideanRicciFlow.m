@@ -1,4 +1,4 @@
-function [ L, V2D ] = EuclideanRicciFlow( F, V3D, varargin )
+function [ L, V2D, allL ] = EuclideanRicciFlow( F, V3D, varargin )
 %EUCLIDEANRICCIFLOW An implementation of the discrete Euclidean Ricci flow
 %for shape deformation and parameterization.  Given a 3D mesh triangulation
 %this pipeline produces a new set of mesh edge lengths such that the
@@ -79,6 +79,12 @@ function [ L, V2D ] = EuclideanRicciFlow( F, V3D, varargin )
 %                           consistently oriented, however this method is
 %                           much slower and prone to self-intersections
 %
+%       - 'ScaleEmbedding': Whether or not to re-scale the embedding to the
+%                           unit disk
+%                           - {'true'} Vertex coordinates of the embedding
+%                           are re-scaled to lie within the unit disk
+%                           - 'false' vertex coordinates are not re-scaled
+%
 %       - 'ScaleMetric':    Whether or not to scale the output lengths
 %                           produced by Ricci flow after embedding
 %                           - {'true'} Output lengths are replaced by the
@@ -93,6 +99,10 @@ function [ L, V2D ] = EuclideanRicciFlow( F, V3D, varargin )
 %                       with the target curvature
 %
 %       - V2D:          #Vx2 2D vertex coordinate list
+%
+%       - allL:         The edge lengths of each intermediate iteration
+%                       along the flow.  Each entry in this cell array is
+%                       an #Ex1 list of edge lengths
 %
 % by Dillon Cislo 11/16/2019
 
@@ -172,6 +182,7 @@ maxIter = 1000;
 maxCircIter = 1000;
 maxPCGIter = numVertex;
 embedMethod = 'isoenergy';
+scaleEmbedding = true;
 scaleMetric = true;
 
 for i = 1:length(varargin)
@@ -221,6 +232,9 @@ for i = 1:length(varargin)
     end
     if ~isempty(regexp(varargin{i}, '^[Ee]mbedding', 'match'))
         embedMethod = lower(varargin{i+1});
+    end
+    if ~isempty(regexp(varargin{i}, '^[Ss]cale[Ee]mbedding', 'match'))
+        scaleEmbedding = varargin{i+1};
     end
     if ~isempty(regexp(varargin{i}, '^[Ss]cale[Mm]etric', 'match'))
        scaleMetric = varargin{i+1};
@@ -301,6 +315,13 @@ validateattributes( maxCircIter, {'numeric'}, ...
 validateattributes( maxPCGIter, {'numeric'}, ...
     {'scalar', 'integer', 'positive'} );
 
+% Determine whether or not to record the intermediate edge lengths
+if nargout > 2
+    recordAllL = true;
+else
+    recordAllL = false;
+end
+
 
 %==========================================================================
 % CONSTRUCT CONNECTIVITY STRUCTURE TOOLS
@@ -344,6 +365,9 @@ V2E = [ E(:), repmat((1:numEdges)', 2, 1) ];
 L0 = V3D( E(:,2), : ) - V3D( E(:,1), : );
 L0 = sqrt( sum(L0.^2, 2) );
 L0_F = L0(feIDx);
+
+% Handle output
+if recordAllL, allL = {L0}; end
 
 % Compute circle packing radii (gamma) for each vertex in each face
 gamma_F0 = ( repmat( sum(L0_F,2), [1 3] ) - 2 .* L0_F ) ./ 2;
@@ -557,10 +581,11 @@ if iterDisp
     fprintf('Beginning Ricci Energy Minimization Round %d\n', iterNum);
 end
 
-[ K, L, gamma_V ] = DiscreteRicciFlow.minimizeRicciEnergy( F, E, V3D, ...
-    feIDx, V2E, allBdyIDx, ...
+[ K, L, gamma_V, allL ] = DiscreteRicciFlow.minimizeRicciEnergy( F, E, ...
+    V3D, feIDx, V2E, allBdyIDx, ...
     K0, Ktar, L0, gamma_V0, invD_E, ...
-    tol, pcgTol, maxIter, maxPCGIter, iterDisp, freeBoundary );
+    tol, pcgTol, maxIter, maxPCGIter, iterDisp, freeBoundary, ...
+    allL, recordAllL );
 
 % Update iteration number
 iterNum = iterNum+1;
@@ -643,10 +668,12 @@ if strcmp( bdyShape, 'circles' )
                 [ iterNum, circleErr ] );
         end
         
-        [ K, L, gamma_V ] = DiscreteRicciFlow.minimizeRicciEnergy( F, ...
-            E, V3D, feIDx, V2E, allBdyIDx, ...
+        [ K, L, gamma_V, allL ] = ...
+            DiscreteRicciFlow.minimizeRicciEnergy( F, E, V3D, ...
+            feIDx, V2E, allBdyIDx, ...
             K, Ktar, L, gamma_V, invD_E, ...
-            tol, pcgTol, maxIter, maxPCGIter, iterDisp, freeBoundary );
+            tol, pcgTol, maxIter, maxPCGIter, iterDisp, freeBoundary, ...
+            allL, recordAllL );
         
         % Increase iteration count
         iterNum = iterNum+1;
@@ -698,24 +725,27 @@ if nargout > 1
     if iterDisp, fprintf('Done\n'); end
     
     % Re-scale circle output to unit disk ---------------------------------
-    if strcmp(bdyType, 'fixed') && (numCones ==  0)
+    if strcmp(bdyType, 'fixed') && (numCones ==  0) && scaleEmbedding
         
-        % Shift and scale embedding vertex positions
+        if iterDisp, fprintf('Re-scaling embedding to unit disk... '); end
+        
         V2D = ( V2D - min(V2D, [], 1) );
         V2D = V2D ./ max(V2D);
         V2D = 2 .* ( V2D - 0.5 );
         
-        % Calculate updated target edge lengths
-        if scaleMetric
-            
-            if iterDisp, fprintf('Re-scaling output metric... '); end
-            
-            L = V2D(E(:,2), :)-V2D(E(:,1), :);
-            L = sqrt(sum(L.^2, 2));
-            
-            if iterDisp, fprintf('Done\n'); end
-            
-        end
+        if iterDisp, fprintf('Done\n'); end
+        
+    end
+    
+    % Re-scale output metric to match embedding edge lengths --------------
+    if scaleMetric
+        
+        if iterDisp, fprintf('Re-scaling output metric... '); end
+        
+        L = V2D(E(:,2), :)-V2D(E(:,1), :);
+        L = sqrt(sum(L.^2, 2));
+        
+        if iterDisp, fprintf('Done\n'); end
         
     end
     
