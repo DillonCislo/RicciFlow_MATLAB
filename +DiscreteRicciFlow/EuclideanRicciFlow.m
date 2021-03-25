@@ -366,8 +366,9 @@ L0 = V3D( E(:,2), : ) - V3D( E(:,1), : );
 L0 = sqrt( sum(L0.^2, 2) );
 L0_F = L0(feIDx);
 
-% Handle output
-if recordAllL, allL = {L0}; end
+% Handle output (we need to instantiate the variable even if we are not
+% recording the intermediate edge lengths during optimization
+allL = {L0};
 
 % Compute circle packing radii (gamma) for each vertex in each face
 gamma_F0 = ( repmat( sum(L0_F,2), [1 3] ) - 2 .* L0_F ) ./ 2;
