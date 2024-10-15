@@ -20,7 +20,7 @@ function [ K, L_E, gamma_V, allL ] = minimizeRicciEnergy( F, E, V3D, ...
 %       - feIDx:        #Fx3 face-edge correspondence tool.  feIDx(f,i) is
 %                       the ID of the edge opposite vertex i in face f
 %
-%       - V2D:          #VEx2 vertex-edge correspondence tool.  Used to sum
+%       - V2E:          #VEx2 vertex-edge correspondence tool.  Used to sum
 %                       edge-based quantites over all edges attached to a
 %                       particular vertex.
 %
@@ -239,13 +239,18 @@ while err > tol
     % Some optional debugging
     if any(abs(intAng)  > 1)
         
-        badFace = any(abs(intAng) > 1, 2 );
-        faceColors = 0.8 .* ones(size(F));
-        faceColors(badFace, : ) = repmat([1 0 0], sum(badFace), 1);
-        
-        trisurf( triangulation(F, V3D), 'FaceVertexCData', faceColors, ...
-            'FaceColor', 'flat', 'EdgeColor', 'k' );
-        axis equal
+        if ~isempty(V3D)
+            
+            badFace = any(abs(intAng) > 1, 2 );
+            faceColors = 0.8 .* ones(size(F));
+            faceColors(badFace, : ) = repmat([1 0 0], sum(badFace), 1);
+            
+            trisurf( triangulation(F, V3D), ...
+                'FaceVertexCData', faceColors, ...
+                'FaceColor', 'flat', 'EdgeColor', 'k' );
+            axis equal
+            
+        end
 
         error('acos out of bounds: probably bad triangle quality');
         

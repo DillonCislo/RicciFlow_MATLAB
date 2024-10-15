@@ -20,6 +20,11 @@ function [ L, V2D, allL ] = EuclideanRicciFlow( F, V3D, varargin )
 %                           iterations and other processes
 %                           - 'false' Displays nothing
 %
+%       - 'EdgeLengths':    #Ex1 list of initial edge lengths. This option
+%                           is used when we wish to supply an intrinsic
+%                           triangulation instead of an extrinsic one (i.e.
+%                           with V3D = [])
+%
 %       - 'BoundaryType':   - {'Free'} Boundary is free to take any shape
 %                           - 'Fixed'  Boundary is set to take one of a
 %                           particular set of pre-defined shapes
@@ -112,30 +117,39 @@ function [ L, V2D, allL ] = EuclideanRicciFlow( F, V3D, varargin )
 
 % Ensure mandatory input parameters are supplied
 if (nargin < 1), error('Please supply face connectivity list'); end
-if (nargin < 2), error('Please supply 3D vertex coordinate list'); end
+if (nargin < 2), V3D = []; end
 
-% Verify the properties of the input triangulation
+% Verify the properties of the input triangulation topology
 validateattributes( F, {'numeric'}, ...
     {'2d', 'ncols', 3, 'integer', 'positive'} );
-validateattributes( V3D, {'numeric'}, ...
-    {'2d', 'ncols', 3, 'finite', 'nonnan'} );
 
 %--------------------------------------------------------------------------
 % Determine mesh topology
 %--------------------------------------------------------------------------
 
 % Construct MATLAB-style representation of the input triangulation
-TR = triangulation( F, V3D );
+if isempty(V3D)
+    
+    numVertex = max(F(:));
+    TR = triangulation(F, zeros(numVertex,3));
+    
+else
+    
+    validateattributes( V3D, {'numeric'}, ...
+        {'2d', 'ncols', 3, 'finite', 'nonnan'} );
+    numVertex = size(V3D,1);
+    TR = triangulation( F, V3D ); 
+    
+end
 
 % Vertex IDs defining edges
 E = sort( TR.edges, 2 );
 
-numFaces = size(F,1); % The number of faces
-numVertex = size(V3D,1); % The number of vertices
+% numFaces = size(F,1); % The number of faces
 numEdges = size(E,1); % The number of edges
 
 % The Euler characteristic of the mesh
-EulerChi = numVertex - numEdges + numFaces;
+% EulerChi = numVertex - numEdges + numFaces;
 
 % Compute the boundaries of the mesh --------------------------------------
 
@@ -151,7 +165,7 @@ interiorIDx = setdiff( 1:numVertex, allBdyIDx );
 numBdy = numel(bdy); % The number of mesh boundaries
 
 % The genus of the mesh
-genus = ( 2 -numBdy - EulerChi ) / 2;
+% genus = ( 2 - numBdy - EulerChi ) / 2;
 
 %**************************************************************************
 % TODO: Add subroutine to cut closed surfaces (medium priority)
@@ -184,6 +198,7 @@ maxPCGIter = numVertex;
 embedMethod = 'isoenergy';
 scaleEmbedding = true;
 scaleMetric = true;
+L0 = [];
 
 for i = 1:length(varargin)
     if isa(varargin{i},'double') 
@@ -194,6 +209,9 @@ for i = 1:length(varargin)
     end
     if ~isempty(regexp(varargin{i},'^[Dd]isplay','match'))
         iterDisp = varargin{i+1};
+    end
+    if ~isempty(regexp(varargin{i},'^[Ee]dge[Ll]engths','match'))
+        L0 = varargin{i+1};
     end
     if ~isempty(regexp(varargin{i},'^[Bb]oundary[Tt]ype','match'))
         bdyType = lower(varargin{i+1});
@@ -239,6 +257,16 @@ for i = 1:length(varargin)
     if ~isempty(regexp(varargin{i}, '^[Ss]cale[Mm]etric', 'match'))
        scaleMetric = varargin{i+1};
     end
+end
+
+% Process initial edge length input
+if isempty(L0)
+    assert(~isempty(V3D), ['You must supply either an embedded ' ...
+        'triangulation or an initial discrete metric']);
+else
+    validateattributes(L0, {'numeric'}, {'vector', 'positive', ...
+        'finite', 'real', 'numel', numEdges});
+    if (size(L0,2) ~= 1), L0 = L0.'; end
 end
 
 % Check that boundary type is valid
@@ -362,9 +390,14 @@ V2E = [ E(:), repmat((1:numEdges)', 2, 1) ];
 %==========================================================================
 
 % Calculate initial mesh edge lengths
-L0 = V3D( E(:,2), : ) - V3D( E(:,1), : );
-L0 = sqrt( sum(L0.^2, 2) );
+if isempty(L0)
+    L0 = V3D( E(:,2), : ) - V3D( E(:,1), : );
+    L0 = sqrt( sum(L0.^2, 2) );
+end
 L0_F = L0(feIDx);
+
+assert( all(all( sum(L0_F, 2) - 2 .* L0_F > 0 )), ...
+    'Input edge lengths violate the triangle inequality');
 
 % Handle output
 if recordAllL
