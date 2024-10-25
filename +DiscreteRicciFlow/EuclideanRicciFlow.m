@@ -815,7 +815,7 @@ if nargout > 1
         if (numBdy == 1)
 
             % Strongly pin outer boundary to the unit disk
-            V2D = complex(V2D(:,1), complex(V2D(:,2)));
+            V2D = complex(V2D(:,1), V2D(:,2));
             V2D(allBdyIDx) = exp(1i .* angle(V2D(allBdyIDx)));
             
             % Map zero point to (0, 0)
