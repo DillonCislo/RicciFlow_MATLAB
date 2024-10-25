@@ -95,6 +95,16 @@ function [ L, V2D, allL ] = EuclideanRicciFlow( F, V3D, varargin )
 %                           - {'true'} Output lengths are replaced by the
 %                           edge lengths of the 2D embedding
 %                           - 'false' Output lengths are returned as is
+%
+%       - 'ZeroID':         The ID of the point to conformally map to
+%                           (0, 0). This is only used if the output
+%                           embedding is mapped to the unit disk and if the
+%                           input mesh is a simple topological disk
+%
+%       - 'OneID'           The ID of the point to conformally map to
+%                           (1, 0). This is only used if the output
+%                           embedding is mapped to the unit disk and if the
+%                           input mesh is a simple topological disk
 %                           
 %
 %   OUTPUT PARAMETERS:
@@ -199,6 +209,8 @@ embedMethod = 'isoenergy';
 scaleEmbedding = true;
 scaleMetric = true;
 L0 = [];
+zeroID = [];
+oneID = [];
 
 for i = 1:length(varargin)
     if isa(varargin{i},'double') 
@@ -256,6 +268,12 @@ for i = 1:length(varargin)
     end
     if ~isempty(regexp(varargin{i}, '^[Ss]cale[Mm]etric', 'match'))
        scaleMetric = varargin{i+1};
+    end
+    if strcmpi(varargin{i}, 'ZeroID')
+        zeroID = varargin{i+1};
+    end
+    if strcmpi(varargin{i}, 'OneID')
+        oneID = varargin{i+1};
     end
 end
 
@@ -348,6 +366,30 @@ if nargout > 2
     recordAllL = true;
 else
     recordAllL = false;
+end
+
+% Process the zero point
+if ~isempty(zeroID)
+    if (numBdy ~= 1)
+        zeroID = []; % Only use for topological disks
+    else
+        validateattributes(zeroID, {'numeric'}, {'scalar', 'integer', ...
+            'finite', 'positive', 'real'});
+        assert(~ismember(zeroID, allBdyIDx), ...
+            'The zero point cannot lie on the mesh boundary');
+    end
+end
+
+% Process the one point
+if ~isempty(oneID)
+    if (numBdy ~= 1)
+        oneID = []; % Only use for topological disks
+    else
+        validateattributes(oneID, {'numeric'}, {'scalar', 'integer', ...
+            'finite', 'positive', 'real'});
+        assert(ismember(oneID, allBdyIDx), ...
+            'The one point must lie on the mesh boundary');
+    end
 end
 
 
@@ -769,6 +811,26 @@ if nargout > 1
         V2D = ( V2D - min(V2D, [], 1) );
         V2D = V2D ./ max(V2D);
         V2D = 2 .* ( V2D - 0.5 );
+
+        if (numBdy == 1)
+
+            % Strongly pin outer boundary to the unit disk
+            V2D = complex(V2D(:,1), complex(V2D(:,2)));
+            V2D(allBdyIDx) = exp(1i .* angle(V2D(allBdyIDx)));
+            
+            % Map zero point to (0, 0)
+            if ~isempty(zeroID)
+                V2D = (V2D - V2D(zeroID)) ./ (1 - conj(V2D(zeroID)) .* V2D);
+            end
+
+            % Map one point to (1, 1)
+            if ~isempty(oneID)
+                V2D = exp(-1i .* angle(V2D(oneID))) .* V2D;
+            end
+
+            V2D = [real(V2D), imag(V2D)];
+
+        end
         
         if iterDisp, fprintf('Done\n'); end
         
